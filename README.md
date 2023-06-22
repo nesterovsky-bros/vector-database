@@ -86,4 +86,14 @@ Again, estimation tells us that we shall complete the searh at most in Log2(N) s
 Implementation
 --------------
 An implementation may worth more than theories.
-So, you're welcome to see it at [DDL.sql]()
+So, you're welcome to see it at [DDL.sql](./DDL.sql)
+
+Use
+---
+1. Create a document: insert something in `dbo.Document`.
+2. Populate vectors: insert something into `dbo.Text`. Note that dbo.Text.Vector should be a JSON array of floats.
+3. Index the document: call the stored procedure `dbo.IndexDocument`.
+4. Do the search: call the table valued function `dbo.Search`.
+
+That's all.
+Thank you for you attention.
