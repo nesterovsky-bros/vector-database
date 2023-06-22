@@ -98,6 +98,6 @@ Use
 That's all.
 Thank you for you attention.
 
-**P.S.:** In addition we have implemented similar index builder algorithms in C#. Though it has the same asympthotical complexity `N*Log2(N)`, works faster. So, in more complex setup index builder is C#, and search is pure SQL.
+**P.S.:** In addition we have implemented similar index builder algorithms in C#. Though it has the same asympthotical complexity `N*Log2(N)`, it works faster. So, in more complex setup index builder is C#, and search is pure SQL.
 
 **P.P.S.:** By the same token we can implement efficient vector index in any SQL database that supports recursive CTE, line SQLite, or in CosmosDB as a function.
