@@ -1,7 +1,7 @@
 # vector-database
 Turn SQL Server into vector database
 
-#Turn Akinator into vector database!
+# Turn Akinator into vector database!
 
 Several year ago we have shown how to turn SQL Server into Akinator like engine. See [KB](https://github.com/nesterovsky-bros/KB) repository.
 
