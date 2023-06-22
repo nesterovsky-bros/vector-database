@@ -48,10 +48,10 @@ Here is our raw vector table:
 ```SQL
 CREATE TABLE dbo.Text
 (
-	DocID bigint NOT NULL,
-	TextID bigint NOT NULL,
-	Text nvarchar(max) NULL,
-	Vector varchar(max) NULL,
+  DocID bigint NOT NULL,
+  TextID bigint NOT NULL,
+  Text nvarchar(max) NULL,
+  Vector varchar(max) NULL,
   PRIMARY KEY CLUSTERED(DocID, TextID)
 );
 ```
@@ -63,17 +63,16 @@ Here is a structure of binary index:
 ```SQL
 CREATE TABLE dbo.TextIndex
 (
-	DocID bigint NOT NULL,
-	RangeID bigint NOT NULL,
-	Dimension smallint NULL,
-	Mid real NULL,
-	LowRangeID bigint NULL,
-	HighRangeID bigint NULL,
-	TextID bigint NULL,
+  DocID bigint NOT NULL,
+  RangeID bigint NOT NULL,
+  Dimension smallint NULL,
+  Mid real NULL,
+  LowRangeID bigint NULL,
+  HighRangeID bigint NULL,
+  TextID bigint NULL,
   PRIMARY KEY(RangeID, DocID) 
   UNIQUE(DocID, RangeID)
 );
-
 ```
 
 The search starts from a given given vector and its proximity.
