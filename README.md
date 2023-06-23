@@ -29,7 +29,7 @@ Let's formulate the idea.
 
 1. We have a set of vectors.  
 2. We want to build an index that allows us to efficiently find vectors in some vicinity of a given vector.  
-3. To achieve the goal we select divide and conquer method.
+3. To achieve the goal we use "divide and conquer" method.
 
 3.1. Lets split whole vector space in two parts.  
   There are multiple ways to do this but we selected one of the simplest and awailable in the SQL.  
