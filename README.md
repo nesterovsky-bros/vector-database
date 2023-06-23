@@ -31,7 +31,7 @@ Let's formulate the idea.
 2. We want to build an index that allows us to efficiently find vectors in some vicinity of a given vector.  
 3. To achieve the goal we use "divide and conquer" method.
 
-3.1. Lets split whole vector space in two parts.  
+3.1. Split whole vector space in two parts.  
   There are multiple ways to do this but we selected one of the simplest and awailable in the SQL.  
   For each dimension we calculated a mean `avg()` and standard deviation `stdev()`.  
   For the split we select a dimension with highest standard deviation, and split in the mean point.  
