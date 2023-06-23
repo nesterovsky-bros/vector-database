@@ -279,7 +279,7 @@ Node as
 		I.RangeID = N.LowRangeID and
 		(
 			N.Dimension is null or
-			N.Mid >= (select MinValue from Vector where Idx = N.Dimension)
+			N.Mid >= any (select MinValue from Vector where Idx = N.Dimension)
 		)
 	union all
 	select
@@ -294,7 +294,7 @@ Node as
 		I.RangeID = N.HighRangeID and
 		(
 			N.Dimension is null or
-			N.Mid <= (select MaxValue from Vector where Idx = N.Dimension)
+			N.Mid <= any (select MaxValue from Vector where Idx = N.Dimension)
 		)
 )
 select DocID, TextID from Node where TextID is not null;
@@ -383,27 +383,6 @@ begin
 --raiserror(N'Points loaded in %i milliseconds.', 0, 0, @timespan) with nowait;
 
 --raiserror(N'Start building index.', 0, 0, @timespan) with nowait;
-
---set @start = current_timestamp;
-
-	declare @ranges table
-	(
-		ID bigint,
-		RangeID bigint,
-		primary key(RangeID, ID)
-	);
-
-  declare @stats table
-  (
-    Level tinyint not null,
-    RangeID bigint not null,
-    Idx smallint not null,
-    Mean real not null,
-    [Stdev] real,
-    Count bigint not null,
-    ID bigint not null,
-    primary key(Level, RangeID)
-  );
 
 --raiserror(N'Start building index.', 0, 0, @timespan) with nowait;
 
