@@ -384,8 +384,6 @@ begin
 
 --raiserror(N'Start building index.', 0, 0, @timespan) with nowait;
 
---raiserror(N'Start building index.', 0, 0, @timespan) with nowait;
-
 --set @start = current_timestamp;
 
   insert into @index
