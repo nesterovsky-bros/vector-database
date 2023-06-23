@@ -12,7 +12,7 @@ Assume you have a set of objects.
 Assume you have a set of boolean properties.  
 We hava a matix of `[objects x properties]` with `true` or `false` in cells.  
 
-If we present all properties as a vectors: `[p1, p2, p3, ..., pn]` then we turn original task to a task of creating an index of object by a vector of booleans.
+If we present all properties as a vectors: `[p1, p2, p3, ..., pn]` then we turn original task to a task of creating an index of objects by a vector of booleans.
 
 ## Present time vector database
 It is only a half a step to extend vector of booleans to vector of floats. It is enough to say that float can be represented as a set of bits (booleans), so all ideas of KB database apply to a vector database.
