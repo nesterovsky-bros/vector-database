@@ -25,11 +25,11 @@ It is only a half a step to extend vector of booleans to vector of floats. It is
 
 3.1. Split whole vector space in two parts.  
   There are multiple ways to do this but we selected one of the simplest and awailable in the SQL.  
-  For each dimension we calculated a mean `avg()` and standard deviation `stdev()`.  
+  For each dimension we calculate a mean `avg()` and standard deviation `stdev()`.  
   For the split we select a dimension with highest standard deviation, and split in the mean point.  
   This gives us two subsets of vectors of similar cardinality.  
   
-3.2. Repeat step 3.1 for each subset until it contains exactly one vector.  
+3.2. Repeat step 3.1 for each subset, unless it contains exactly one vector.    
 
 The height of the tree is proportional to `Log2(N)`, where `N` is number of vectors in the set.  
 Estimation gives that for a set of `N` vectors the number of operations required to build such binary index is proportional to `N*Log2(N)`.  
@@ -64,9 +64,9 @@ create table dbo.TextIndex
 );
 ```
 
-The search starts from a given `vector` and its proximity.  
-We start from the root `RangeID = 0`, and compare `Dimension` of input `vector` against `Mid`.  
-Depending on outcome we proceed to low (`LowRangeID`), high (`HighRangeID`), or to both ranges.  
+The search starts from a given `vector` and a `proximity`.  
+We start from the root `RangeID = 0`, and compare `Dimension` of input `vector ± proximity` against `Mid`.  
+Depending on the outcome we proceed to low (`LowRangeID`), high (`HighRangeID`), or to both ranges.  
 We repeat previous step with next ranges until we locate all matched vectors.
 
 Estimation tells that we shall complete the searh at most in `Log2(N)` steps.
