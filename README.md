@@ -25,7 +25,7 @@ It is only a half a step to extend vector of booleans to vector of floats. It is
 
 3.1. Split whole vector space in two parts.  
   There are multiple ways to do this but we selected one of the simplest and available in the SQL.  
-  For each dimension we calculate a mean `avg()` and standard deviation `stdev()`.  
+  We calculate a mean `avg()` and a standard deviation `stdev()` of all vectors for each dimension.  
   For the split we select a dimension with highest standard deviation, and split in the mean point.  
   This gives us two subsets of vectors of similar cardinality.  
   
