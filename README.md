@@ -31,7 +31,7 @@ It is only a half a step to extend vector of booleans to vector of floats. It is
   
 3.2. Repeat step 3.1 for each subset, unless it contains exactly one vector.    
 
-The height of the tree is proportional to `Log2(N)`, where `N` is number of vectors in the set.  
+The height of the tree that we build this way is proportional to `Log2(N)`, where `N` is number of vectors in the set.  
 Estimation gives that for a set of `N` vectors the number of operations required to build such binary index is proportional to `N*Log2(N)`.  
 Obviously, compexity of algorithm is propotional to a dimension of vectors.
 
