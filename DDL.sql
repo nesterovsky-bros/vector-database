@@ -1,6 +1,6 @@
 USE [Vectors]
 GO
-/****** Object:  UserDefinedTableType [dbo].[PointType]    Script Date: 23/06/2023 0:03:27 ******/
+/****** Object:  UserDefinedTableType [dbo].[PointType]    Script Date: 28/06/2023 17:06:20 ******/
 CREATE TYPE [dbo].[PointType] AS TABLE(
 	[ID] [bigint] NOT NULL,
 	[Idx] [smallint] NOT NULL,
@@ -12,7 +12,7 @@ CREATE TYPE [dbo].[PointType] AS TABLE(
 )WITH (IGNORE_DUP_KEY = OFF)
 )
 GO
-/****** Object:  UserDefinedTableType [dbo].[RangeType]    Script Date: 23/06/2023 0:03:27 ******/
+/****** Object:  UserDefinedTableType [dbo].[RangeType]    Script Date: 28/06/2023 17:06:20 ******/
 CREATE TYPE [dbo].[RangeType] AS TABLE(
 	[RangeID] [bigint] NOT NULL,
 	[Dimension] [smallint] NULL,
@@ -26,7 +26,7 @@ CREATE TYPE [dbo].[RangeType] AS TABLE(
 )WITH (IGNORE_DUP_KEY = OFF)
 )
 GO
-/****** Object:  UserDefinedFunction [dbo].[BuildIndex]    Script Date: 23/06/2023 0:03:27 ******/
+/****** Object:  UserDefinedFunction [dbo].[BuildIndex]    Script Date: 28/06/2023 17:06:20 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -50,35 +50,32 @@ returns @index table
 as
 begin
   declare @ranges table
-	(
-		ID bigint,
-		RangeID bigint,
-		primary key(RangeID, ID)
-	);
+  (
+    ID bigint,
+    RangeID bigint,
+    primary key(RangeID, ID)
+  );
 
   declare @stats table
   (
-    Level tinyint not null,
-    RangeID bigint not null,
+    RangeID bigint not null primary key,
     Idx smallint not null,
     Mean real not null,
     [Stdev] real,
     Count bigint not null,
-    ID bigint not null,
-    primary key(Level, RangeID)
+    ID bigint not null
   );
 
 --raiserror(N'Level 0.', 0, 0) with nowait;
 
-  insert into @stats(Level, RangeID, Idx, Mean, Stdev, Count, ID)
+  insert into @stats(RangeID, Idx, Mean, Stdev, Count, ID)
   select top 1
-    0,
     0,
     Idx,
     avg(Value),
     isnull(stdev(Value), 0) Stdev,
     count_big(*),
-    min(ID)
+    avg(ID)
   from
     @points
   group by
@@ -92,16 +89,7 @@ begin
   begin
     insert @ranges(RangeID, ID)
     select
-      case 
-        when S.Stdev = 0 then
-          row_number() over(order by @next) % 2 + 1
-        when 
-          Mean > Value 
-        then
-          1
-        else
-          2
-      end RangeID,
+      iif(S.Stdev = 0, iif(P.ID <= S.ID, 1, 2), iif(Value < Mean, 1, 2)),
       P.ID
     from
       @points P
@@ -112,15 +100,14 @@ begin
         S.Count > 1;
 
     set @next = @@rowcount;
-    declare @level tinyint = 1;
+    declare @level bigint = 0;
 
     while(@next != 0)
     begin
 --raiserror(N'Level %i.', 0, 0, @level) with nowait;
 
-      insert into @stats(Level, RangeID, Idx, Mean, Stdev, Count, ID)
+      insert into @stats(RangeID, Idx, Mean, Stdev, Count, ID)
       select
-        @level, 
         S.RangeID * 2 + N.I, 
         R.Idx, 
         R.Mean, 
@@ -132,7 +119,7 @@ begin
         join
         (select 1 union all select 2) N(I)
         on
-          S.Level = @level - 1 and
+          S.RangeID >= @level and
           S.Count > 1
         cross apply
         (
@@ -140,8 +127,8 @@ begin
             P.Idx,
             avg(P.Value) Mean,
             isnull(stdev(P.Value), 0) Stdev,
-            min(P.ID) ID,
-            count_big(*) Count
+            count_big(*) Count,
+            avg(P.ID) ID
           from
             @ranges R
             join
@@ -155,28 +142,22 @@ begin
             Stdev desc
         ) R;
 
+      set @level = @level * 2 + 1;
+
       with R as
       (
         select
           R.*,
           R.RangeID * 2 + 
-            case 
-              when S.Stdev = 0 then
-                row_number() over(partition by R.RangeID order by @next) % 2 + 1
-              when 
-                Mean > Value
-              then
-                1
-              else
-                2
-            end NewRangeID
+            iif(S.Stdev = 0, iif(R.ID <= S.ID, 1, 2), iif(Value < Mean, 1, 2))
+            NewRangeID
         from
           @ranges R
           join
           @stats S
           on
             S.RangeID = R.RangeID and
-            S.Level = @level and
+            S.RangeID >= @level and
             S.Count > 1
           join
           @points P
@@ -185,10 +166,10 @@ begin
             P.Idx = S.Idx
       )
       update R
-      set RangeID = NewRangeID;
+      set 
+        RangeID = NewRangeID;
 
       set @next = @@rowcount;
-      set @level += 1;
     end;
   end;
 
@@ -206,7 +187,7 @@ begin
   return;
 end
 GO
-/****** Object:  Table [dbo].[TextIndex]    Script Date: 23/06/2023 0:03:27 ******/
+/****** Object:  Table [dbo].[TextIndex]    Script Date: 28/06/2023 17:06:20 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -231,7 +212,7 @@ CREATE TABLE [dbo].[TextIndex](
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 GO
-/****** Object:  UserDefinedFunction [dbo].[Search]    Script Date: 23/06/2023 0:03:28 ******/
+/****** Object:  UserDefinedFunction [dbo].[Search]    Script Date: 28/06/2023 17:06:20 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -274,13 +255,13 @@ Node as
 	  inner join
 	  Node N
 	  on
-		N.LowRangeID is not null and
-	    I.DocID = N.DocID and
-		I.RangeID = N.LowRangeID and
-		(
-			N.Dimension is null or
-			N.Mid >= any (select MinValue from Vector where Idx = N.Dimension)
-		)
+		  N.LowRangeID is not null and
+	      I.DocID = N.DocID and
+		  I.RangeID = N.LowRangeID and
+		  (
+			  N.Dimension is null or
+			  N.Mid >= (select MinValue from Vector where Idx = N.Dimension)
+		  )
 	union all
 	select
 	  I.*
@@ -289,17 +270,17 @@ Node as
 	  inner join
 	  Node N
 	  on
-		N.HighRangeID is not null and
-	    I.DocID = N.DocID and
-		I.RangeID = N.HighRangeID and
-		(
-			N.Dimension is null or
-			N.Mid <= any (select MaxValue from Vector where Idx = N.Dimension)
-		)
+		  N.HighRangeID is not null and
+	      I.DocID = N.DocID and
+		  I.RangeID = N.HighRangeID and
+		  (
+			  N.Dimension is null or
+			  N.Mid <= (select MaxValue from Vector where Idx = N.Dimension)
+		  )
 )
 select DocID, TextID from Node where TextID is not null;
 GO
-/****** Object:  Table [dbo].[Document]    Script Date: 23/06/2023 0:03:28 ******/
+/****** Object:  Table [dbo].[Document]    Script Date: 28/06/2023 17:06:20 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -313,7 +294,7 @@ CREATE TABLE [dbo].[Document](
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
 ) ON [PRIMARY]
 GO
-/****** Object:  Table [dbo].[Text]    Script Date: 23/06/2023 0:03:28 ******/
+/****** Object:  Table [dbo].[Text]    Script Date: 28/06/2023 17:06:20 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -348,7 +329,7 @@ ON DELETE CASCADE
 GO
 ALTER TABLE [dbo].[TextIndex] CHECK CONSTRAINT [FK_TextIndex_Document]
 GO
-/****** Object:  StoredProcedure [dbo].[IndexDocument]    Script Date: 23/06/2023 0:03:28 ******/
+/****** Object:  StoredProcedure [dbo].[IndexDocument]    Script Date: 28/06/2023 17:06:20 ******/
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -381,6 +362,10 @@ begin
 --set @timespan = datediff(ms, @start, @end);
 
 --raiserror(N'Points loaded in %i milliseconds.', 0, 0, @timespan) with nowait;
+
+--raiserror(N'Start building index.', 0, 0, @timespan) with nowait;
+
+--set @start = current_timestamp;
 
 --raiserror(N'Start building index.', 0, 0, @timespan) with nowait;
 
