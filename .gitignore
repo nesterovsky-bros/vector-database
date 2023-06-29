@@ -1,0 +1,9 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs
+/VectorIndex/obj
+/VectorIndex/bin
+/VectorIndex.MainTest/obj
+/VectorIndex.MainTest/bin/Debug/net6.0
