@@ -10,7 +10,7 @@ namespace NesterovskyBros.VectorIndex;
 /// <typeparam name="K">A key type.</typeparam>
 /// <typeparam name="V">A value type.</typeparam>
 public class FasterStore<K, V>: IStore<K, V>
-    where K: struct
+  where K: struct
 {
   /// <summary>
   /// <para>Creates a <see cref="FasterStore{K, V}"/> instance.</para>
@@ -44,26 +44,9 @@ public class FasterStore<K, V>: IStore<K, V>
   }
 
   /// <inheritdoc/>
-  public async ValueTask<V?> Get(K key) =>
-    await Run(async session =>
-      (await session.ReadAsync(ref key)).Complete().output);
-
-  /// <inheritdoc/>
-  public IAsyncEnumerable<(K key, V value)> GetItems() =>
-    Run(session =>
-    {
-      return items();
-
-      IEnumerable<(K key, V value)> items()
-      {
-        using var iterator = session.Iterate();
-
-        while(iterator.GetNext(out _, out var key, out var value))
-        {
-          yield return (key, value);
-        }
-      }
-    }).ToAsyncEnumerable();
+  public ValueTask<V?> Get(K key) =>
+    Run(async session =>
+      (await session.ReadAsync(ref key)).Complete().output)!;
 
   /// <inheritdoc/>
   public async ValueTask Set(K key, V value) =>
@@ -73,25 +56,52 @@ public class FasterStore<K, V>: IStore<K, V>
   public async ValueTask Remove(K key) =>
     await Run(session => session.DeleteAsync(ref key));
 
-  private T Run<T>(
-    Func<ClientSession<K, V, V, V, Empty, IFunctions<K, V, V, V, Empty>>, T> func)
+  /// <inheritdoc/>
+  public IAsyncEnumerable<(K key, V value)> GetItems()
   {
-#pragma warning disable CA2000 // Dispose objects before losing scope
-    if(!sessions.TryPop(out var session))
+    return items().ToAsyncEnumerable();
+
+    IEnumerable<(K key, V value)> items()
     {
-      session = store.NewSession(new SimpleFunctions<K, V>());
+      var session = GetSession();
+
+      try
+      {
+        using var iterator = session.Iterate();
+
+        while(iterator.GetNext(out _, out var key, out var value))
+        {
+          yield return (key, value);
+        }
+      }
+      finally
+      {
+        sessions.Push(session);
+      }
     }
-#pragma warning restore CA2000 // Dispose objects before losing scope
+  }
+
+  private async ValueTask<T> Run<T>(
+    Func<
+      ClientSession<K, V, V, V, Empty, IFunctions<K, V, V, V, Empty>>, 
+      ValueTask<T>> func)
+  {
+    var session = GetSession();
 
     try
     {
-      return func(session);
+      return await func(session);
     }
     finally
     {
       sessions.Push(session);
     }
   }
+
+  private ClientSession<K, V, V, V, Empty, IFunctions<K, V, V, V, Empty>> 
+    GetSession() =>
+    sessions.TryPop(out var session) ? session :
+      store.NewSession(new SimpleFunctions<K, V>());
 
   private readonly FasterKVSettings<K, V> settings;
   private readonly FasterKV<K, V> store;
