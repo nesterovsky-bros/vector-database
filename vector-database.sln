@@ -1,0 +1,38 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33530.505
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VectorIndex", "VectorIndex\VectorIndex.csproj", "{B41A62A3-7E59-4030-8777-37AA72790EDB}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "VectorIndex.MainTest", "VectorIndex.MainTest\VectorIndex.MainTest.csproj", "{04DC6990-8492-41A6-9C0A-19C39B315919}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Files", "Files", "{D7D7DEE3-EFCB-486D-B61F-8E2DAD0466E4}"
+	ProjectSection(SolutionItems) = preProject
+		DDL.sql = DDL.sql
+		LICENSE = LICENSE
+		README.md = README.md
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B41A62A3-7E59-4030-8777-37AA72790EDB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B41A62A3-7E59-4030-8777-37AA72790EDB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B41A62A3-7E59-4030-8777-37AA72790EDB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B41A62A3-7E59-4030-8777-37AA72790EDB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{04DC6990-8492-41A6-9C0A-19C39B315919}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{04DC6990-8492-41A6-9C0A-19C39B315919}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{04DC6990-8492-41A6-9C0A-19C39B315919}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{04DC6990-8492-41A6-9C0A-19C39B315919}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {CF23CC1E-AFB8-4517-B126-F03D7F2B5311}
+	EndGlobalSection
+EndGlobal

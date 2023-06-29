@@ -84,6 +84,6 @@ So, you're welcome to see it in [DDL.sql](./DDL.sql)
 That's all.
 Thank you for you attention.
 
-**P.S.:** In addition we have implemented similar index builder algorithm in C#. Though it has the same asymptotical complexity `N*Log2(N)`, it works faster. So, in more complex setup index builder may be implemented in the C#, and search is in the pure SQL.
+**P.S.:** In addition we have implemented similar [index builder algorithm](./VectorIndex/IndexBuilder.cs) in C#. Though it has the same asymptotical complexity `N*Log2(N)`, it works faster. So, in more complex setup index builder may be implemented in the C#, and search is in the pure SQL.
 
 **P.P.S.:** By the same token we can implement efficient vector index in any SQL database that supports recursive CTE (like SQLite), or in CosmosDB as a function.
