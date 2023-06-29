@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Drawing;
+using System.Reflection;
 
 namespace NesterovskyBros.VectorIndex;
 
@@ -36,8 +38,7 @@ public partial class IndexBuilder
       await pointRanges.Set(key, 0);
     }
 
-    var segments =
-      new ConcurrentDictionary<long, ImmutableDictionary<long, int>>();
+    var segments = new ConcurrentDictionary<long, (int index, byte[] bits)>();
     var rangeLocks = new ConcurrentDictionary<long,
       (SemaphoreSlim semaphore, int refcount)>();
 
@@ -51,10 +52,10 @@ public partial class IndexBuilder
         async (item, cancellationToken) =>
         {
           var (id, rangeId) = item;
-          var (segment, ids) = GetSegment(id, rangeId);
           var point = await points.Get(id);
+          var segment = GetSegment(rangeId);
 
-          if (ids.Count > 1)
+          if (segment != 0)
           {
             singleSegment = false;
           }
@@ -100,7 +101,7 @@ public partial class IndexBuilder
 
           await stats.Set(key, statsItem);
 
-          ReleaseSegment(id, rangeId, ids);
+          ReleaseSegment(rangeId, segment);
         });
 
       if (!singleSegment)
@@ -116,11 +117,11 @@ public partial class IndexBuilder
 
             var rangeId = item.key.RangeID;
             var statsItem = item.value;
+            var groupKey = new StatsKey { Segment = 0, RangeID = rangeId };
             var handle = await LockRange(rangeId);
 
             try
             {
-              var groupKey = new StatsKey { Segment = 0, RangeID = rangeId };
               var groupItem = await stats.Get(groupKey);
 
               for(var i = 0; i < groupItem!.Length; ++i)
@@ -139,12 +140,13 @@ public partial class IndexBuilder
               }
 
               await stats.Set(groupKey, groupItem);
-              await stats.Remove(item.key);
             }
             finally
             {
               ReleaseRange(rangeId, handle);
             }
+
+            await stats.Remove(item.key);
           });
         }
 
@@ -223,52 +225,65 @@ public partial class IndexBuilder
         });
     }
 
-    (int segment, ImmutableDictionary<long, int> ids) GetSegment(
-      long id, 
-      long rangeId)
-    {
-      var ids = segments.AddOrUpdate(
+    int GetSegment(long rangeId) =>
+      segments.AddOrUpdate(
         rangeId,
-        rangeId => ImmutableDictionary<long, int>.Empty.Add(id, 0),
-        (rangeId, segments) =>
+        rangeId => (0, new byte[] { 1 }),
+        (rangeId, value) =>
         {
-          for(var i = 0; ; ++i)
+          var bits = value.bits;
+          var index = Array.IndexOf<byte>(bits, 0);
+
+          if (index < 0)
           {
-            if (!segments.ContainsValue(i))
-            {
-              return segments.Add(id, i);
-            }
+            index = bits.Length;
+            Array.Resize(ref bits, index + 1);
           }
-        });
+          else
+          {
+            bits = (byte[])bits.Clone();
+          }
 
-      var segment = ids[id];
+          bits[index] = 1;
 
-      return (segment, ids);
-    }
+          return (index, bits);
+        }).index;
 
-    void ReleaseSegment(
-      long id, 
-      long rangeId, 
-      ImmutableDictionary<long, int> ids)
+    void ReleaseSegment(long rangeId, int segment)
     {
       while(true)
       {
-        if (ids.Count == 1)
+        var value = segments[rangeId];
+        var bits = value.bits;
+        var empty = true;
+
+        for(var i = 0; i < bits.Length; ++i)
         {
-          if (segments.TryRemove(new(rangeId, ids)))
+          if (i != segment && bits[i] != 0)
+          {
+            empty = false;
+
+            break;
+          }
+        }
+
+        if (empty)
+        {
+          if (segments.TryRemove(new(rangeId, value)))
           {
             break;
           }
         }
         else
         {
-          if (segments.TryUpdate(rangeId, ids.Remove(id), ids))
+          bits = (byte[])bits.Clone();
+          bits[segment] = 0;
+
+          if (segments.TryUpdate(rangeId, (-1, bits), value))
           {
             break;
           }
         }
-
-        ids = segments[rangeId];
       }
     }
 

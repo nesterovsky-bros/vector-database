@@ -52,7 +52,7 @@ var random = new Random();
 //    await points.Set(item.index, item.vector);
 //}
 
-for(var i = 0; i < 100000; ++i)
+for(var i = 0; i < 10000; ++i)
 {
   var vector = new float[1536];
 
@@ -82,10 +82,10 @@ Console.WriteLine($"Build index: {stopwatch.Elapsed}");
 
 //await File.WriteAllTextAsync("C:\\Temp\\Chatbot\\melinda\\melinda.embedding.json", embeddingJson);
 
-//await foreach(var range in ranges.GetItems())
-//{
-//  Console.WriteLine(range);
-//}
+await foreach(var range in ranges.GetItems())
+{
+  Console.WriteLine(range.value);
+}
 
 FasterStore<K, V> CreateStore<K, V>(string path)
   where K: struct
