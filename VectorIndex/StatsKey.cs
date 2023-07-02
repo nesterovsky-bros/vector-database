@@ -3,15 +3,6 @@
 /// <summary>
 /// A stats key.
 /// </summary>
-public readonly record struct StatsKey
-{
-  /// <summary>
-  /// A grouping segment.
-  /// </summary>
-  public int Segment { get; init; }
-
-  /// <summary>
-  /// A range id.
-  /// </summary>
-  public long RangeID { get; init; }
-}
+/// <param name="Segment">A grouping segment.</param>
+/// <param name="RangeID">A range id.</param>
+public readonly record struct StatsKey(int Segment, long RangeID);

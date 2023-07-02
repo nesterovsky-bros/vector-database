@@ -7,6 +7,14 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <Optimize>True</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HDF5-CSharp" Version="1.17.0" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\VectorIndex\VectorIndex.csproj" />
   </ItemGroup>

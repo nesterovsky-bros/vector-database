@@ -470,3 +470,4 @@ java/.mvn/wrapper/maven-wrapper.jar
 
 # Java settings
 conf.properties
+/data

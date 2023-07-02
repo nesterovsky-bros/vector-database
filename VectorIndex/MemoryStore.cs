@@ -16,28 +16,28 @@ public class MemoryStore<K, V>: IStore<K, V>
   public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
   /// <inheritdoc/>
-  public ValueTask<V?> Get(K key) =>
-      new(data.TryGetValue(key, out var value) ? value : default);
+  public ValueTask<V?> Get(K id) =>
+      new(data.TryGetValue(id, out var value) ? value : default);
 
   /// <inheritdoc/>
-  public IAsyncEnumerable<(K key, V value)> GetItems() =>
+  public ValueTask Set(K id, V value)
+  {
+    data[id] = value;
+
+    return ValueTask.CompletedTask;
+  }
+
+  /// <inheritdoc/>
+  public ValueTask Remove(K id)
+  {
+    data.Remove(id, out _);
+
+    return ValueTask.CompletedTask;
+  }
+
+  /// <inheritdoc/>
+  public IAsyncEnumerable<(K id, V value)> GetItems() =>
       data.Select(entry => (entry.Key, entry.Value)).ToAsyncEnumerable();
-
-  /// <inheritdoc/>
-  public ValueTask Set(K key, V value)
-  {
-    data[key] = value;
-
-    return ValueTask.CompletedTask;
-  }
-
-  /// <inheritdoc/>
-  public ValueTask Remove(K key)
-  {
-    data.Remove(key, out _);
-
-    return ValueTask.CompletedTask;
-  }
 
   private readonly ConcurrentDictionary<K, V> data = new();
 }

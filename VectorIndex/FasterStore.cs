@@ -44,40 +44,49 @@ public class FasterStore<K, V>: IStore<K, V>
   }
 
   /// <inheritdoc/>
-  public ValueTask<V?> Get(K key) =>
+  public ValueTask<V?> Get(K id) =>
     Run(async session =>
-      (await session.ReadAsync(ref key)).Complete().output)!;
+      (await session.ReadAsync(ref id)).Complete().output)!;
 
   /// <inheritdoc/>
-  public async ValueTask Set(K key, V value) =>
-    await Run(session => session.UpsertAsync(ref key, ref value));
+  public async ValueTask Set(K id, V value) =>
+    await Run(async session =>
+    {
+      var result = await session.UpsertAsync(ref id, ref value);
+
+      while(result.Status.IsPending)
+      {
+        result = await result.CompleteAsync();
+      }
+
+      return result;
+    });
 
   /// <inheritdoc/>
   public async ValueTask Remove(K key) =>
     await Run(session => session.DeleteAsync(ref key));
 
   /// <inheritdoc/>
-  public IAsyncEnumerable<(K key, V value)> GetItems()
+  public IAsyncEnumerable<(K id, V value)> GetItems() =>
+    Items().ToAsyncEnumerable();
+
+  private IEnumerable<(K id, V value)> Items()
   {
-    return items().ToAsyncEnumerable();
+    var session = GetSession();
 
-    IEnumerable<(K key, V value)> items()
+    try
     {
-      var session = GetSession();
+      using var iterator = session.Iterate();
 
-      try
+      while(iterator.GetNext(out _, out var key, out var value))
       {
-        using var iterator = session.Iterate();
-
-        while(iterator.GetNext(out _, out var key, out var value))
-        {
-          yield return (key, value);
-        }
+        yield return (key, value);
       }
-      finally
-      {
-        sessions.Push(session);
-      }
+    }
+    finally
+    {
+      //session.Dispose();
+      sessions.Push(session);
     }
   }
 
@@ -94,6 +103,7 @@ public class FasterStore<K, V>: IStore<K, V>
     }
     finally
     {
+      //session.Dispose();
       sessions.Push(session);
     }
   }
