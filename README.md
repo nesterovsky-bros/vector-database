@@ -87,3 +87,19 @@ Thank you for you attention.
 **P.S.:** In addition we have implemented similar [index builder algorithm](./VectorIndex/IndexBuilder.cs) in C#. Though it has the same asymptotical complexity `N*Log2(N)`, it works faster. So, in more complex setup index builder may be implemented in the C#, and search is in the pure SQL.
 
 **P.P.S.:** By the same token we can implement efficient vector index in any SQL database that supports recursive CTE (like SQLite), or in CosmosDB as a function.
+
+ ## C#
+
+It turned that our initial parallel C# implementation is not scalable for relatively big datasets like deep-image-96-angular containing ~10M.
+Though it parallel and has `O(N*Log2(N))` complexity it runs wildly against Processor/CPU data locality, and producess enormous number of Page Faults.
+Alternative data storage like FasterKV turn out to be too slow.
+
+So, we went and refactored the code from parallel tree level processor into sequential tree walker.
+It virtually follows steps 3.1, and 3.2 sequentially for one range at time.
+See https://github.com/nesterovsky-bros/vector-database/blob/deea9da842cb12e4edcde4e03a1e68014754d15b/VectorIndex/IndexBuilder.cs#L488.
+
+In such mode we are able to build an index on a laptop just in 3 minutes.
+
+Right now we want to implement benchmarks like in https://qdrant.tech/benchmarks/ though we're not going to implement Client-Server protocol right now. 
+Yet we think we can get the idea where we stand comparing to other vector engines.
+
