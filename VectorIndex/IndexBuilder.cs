@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Drawing;
+using System.Numerics;
 using System.Text;
 
 namespace NesterovskyBros.VectorIndex;
@@ -78,9 +79,12 @@ public partial class IndexBuilder
 
       RangeValue range = match.Count == 1 ?
         new() { Dimension = -1, Id = (long)match.IdN } :
-        match.Stdev2N == 0 ?
-          new() { Dimension = -2, Id = (long)(match.IdN / match.Count) } :
-          new() { Dimension = index, Mid = match.Mean };
+        new() 
+        { 
+          Dimension = index, 
+          Mid = match.Mean, 
+          Id = (long)(match.IdN / match.Count) 
+        };
 
       await ranges.Set(0, range);
 
@@ -94,10 +98,11 @@ public partial class IndexBuilder
         async item =>
         {
           var (id, point) = item;
+          var value = point.Span[range.Dimension];
 
-          var rangeId = range.Dimension < 0 ?
-            id <= range.Id ? 1 : 2 :
-            point.Span[range.Dimension] < range.Mid ? 1 : 2;
+          var rangeId = value < range.Mid ? 1 :
+            value > range.Mid ? 2 :
+            id <= range.Id ? 1 : 2;
 
           await pointRanges.Set(id, rangeId);
         });
@@ -154,17 +159,16 @@ public partial class IndexBuilder
             await pointRanges.Remove(id);
             Interlocked.Decrement(ref count);
           }
-          else if (match.Stdev2N == 0)
-          {
-            await ranges.Set(
-              rangeId, 
-              new() { Dimension = -2, Id = (long)(match.IdN / match.Count) });
-          }
           else
           {
             await ranges.Set(
               rangeId, 
-              new() { Dimension = index, Mid = match.Mean });
+              new() 
+              { 
+                Dimension = index, 
+                Mid = match.Mean,
+                Id = (long)(match.IdN / match.Count)
+              });
           }
 
           await stats.Remove(item.id);
@@ -184,19 +188,13 @@ public partial class IndexBuilder
         {
           var (pointId, rangeId) = item;
           var range = await ranges.Get(rangeId);
-          long nextRangeId;
+          var point = await points.Get(pointId);
+          var value = point.Span[range.Dimension];
 
-          if (range.Dimension < 0)
-          {
-            nextRangeId = rangeId * 2 + (pointId <= range.Id ? 1 : 2);
-          }
-          else
-          {
-            var point = await points.Get(pointId);
-
-            nextRangeId = 
-              rangeId * 2 + (point.Span[range.Dimension] < range.Mid ? 1 : 2);
-          }
+          var nextRangeId = rangeId * 2 +
+            (value < range.Mid ? 1 :
+              value > range.Mid ? 2 :
+              pointId <= range.Id ? 1 : 2);
 
           await pointRanges.Set(pointId, nextRangeId);
         });
@@ -460,7 +458,7 @@ public partial class IndexBuilder
   /// </summary>
   /// <param name="rangeId">A range id.</param>
   /// <param name="range">A range value.</param>
-  /// <returns></returns>
+  /// <returns>An <see cref="IndexRange"/> value.</returns>
   public static IndexRange GetRange(long rangeId, RangeValue range) =>
     range.Dimension switch 
     {
@@ -485,10 +483,22 @@ public partial class IndexBuilder
       }
     };
 
+  /// <summary>
+  /// Gets range enumerations of points.
+  /// </summary>
+  /// <param name="points">A points enumeration.</param>
+  /// <param name="storeFactory">
+  /// A factory to create a temporary store of points. Called as:
+  /// <code>storeFactory(rangeId, capacity)</code>.
+  /// </param>
+  /// <returns></returns>
   public static async IAsyncEnumerable<(long rangeId, RangeValue range)> Build(
     IAsyncEnumerable<(long id, Memory<float> vector)> points,
-    Func<IRangeStore> storeFactory)
+    Func<long, long, IRangeStore> storeFactory)
   {
+    var iteration = 0L;
+    var level = 0;
+
     Stats[]? stats = null;
     Stack<(long rangeId, IRangeStore store)> stack = new();
 
@@ -500,11 +510,25 @@ public partial class IndexBuilder
       {
         try
         {
+          ++iteration;
+
+          level = Math.Max(
+            level, 
+            64 - BitOperations.LeadingZeroCount((ulong)item.rangeId));
+
+          if (iteration < 10 ||
+            iteration < 1000 && iteration % 100 == 0 ||
+            iteration < 10000 && iteration % 1000 == 0 ||
+            iteration % 10000 == 0)
+          {
+            Console.WriteLine($"Process {iteration} ranges. Level {level}");
+          }
+
           var count = 0L;
 
           await foreach(var (id, vector) in item.store.GetPoints())
           {
-            if(count++ == 0)
+            if (count++ == 0)
             {
               stats ??= new Stats[vector.Length];
               InitStats(id, vector);
@@ -520,15 +544,21 @@ public partial class IndexBuilder
             continue;
           }
 
+          var max =
+            (BitOperations.LeadingZeroCount((ulong)item.rangeId) & 1) == 0;
+          
           var (match, index) = stats!.
             Select((stats, index) => (stats, index)).
-            MaxBy(item => item.stats.Stdev2N);
+            MaxBy(item => max ? item.stats.Stdev2N : -item.stats.Stdev2N);
 
           RangeValue range = count == 1 ?
             new() { Dimension = -1, Id = (long)stats![0].IdN } :
-            match.Stdev2N == 0 ?
-              new() { Dimension = -2, Id = (long)(match.IdN / match.Count) } :
-              new() { Dimension = index, Mid = match.Mean };
+            new() 
+            { 
+              Dimension = index, 
+              Mid = match.Mean, 
+              Id = (long)(match.IdN / match.Count)
+            };
 
           var rangeId = item.rangeId;
 
@@ -539,21 +569,28 @@ public partial class IndexBuilder
             continue;
           }
 
-          var low = storeFactory();
+          var lowRangeId = checked(rangeId * 2 + 1);
+          var low = storeFactory(lowRangeId, count);
 
-          stack.Push((rangeId * 2 + 1, low));
+          stack.Push((lowRangeId, low));
 
-          var high = storeFactory();
+          var highRangeId = checked(rangeId * 2 + 2);
+          var high = storeFactory(highRangeId, count);
 
-          stack.Push((rangeId * 2 + 2, high));
+          stack.Push((highRangeId, high));
 
           await foreach(var (id, vector) in item.store.GetPoints())
           {
-            var isHigh = range.Dimension < 0 ?
-              id > range.Id :
-              vector.Span[range.Dimension] >= range.Mid;
+            var value = vector.Span[range.Dimension];
 
-            await (isHigh ? high : low).Add(id, vector);
+            if (value > range.Mid || value == range.Mid && id > range.Id)
+            {
+              await high.Add(id, vector);
+            }
+            else
+            {
+              await low.Add(id, vector);
+            }
           }
         }
         finally

@@ -32,8 +32,16 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+USE [Vectors]
+GO
+/****** Object:  UserDefinedFunction [dbo].[BuildIndex]    Script Date: 04/07/2023 12:54:24 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
 -- Builds range index for points.
-CREATE function [dbo].[BuildIndex]
+create function [dbo].[BuildIndex]
 (
   -- a points table to build range index.
   @points dbo.PointType readonly
@@ -50,11 +58,11 @@ returns @index table
 as
 begin
   declare @ranges table
-  (
-    ID bigint,
-    RangeID bigint,
-    primary key(RangeID, ID)
-  );
+	(
+		ID bigint,
+		RangeID bigint,
+		primary key(RangeID, ID)
+	);
 
   declare @stats table
   (
@@ -101,6 +109,7 @@ begin
 
     set @next = @@rowcount;
     declare @level bigint = 0;
+    declare @i tinyint = 0;
 
     while(@next != 0)
     begin
@@ -139,18 +148,23 @@ begin
           group by
             Idx
           order by
-            Stdev desc
+            iif(@level % 2 = 1, Stdev, -Stdev) desc
         ) R;
 
       set @level = @level * 2 + 1;
+      set @i += 1;
 
       with R as
       (
         select
           R.*,
           R.RangeID * 2 + 
-            iif(S.Stdev = 0, iif(R.ID <= S.ID, 1, 2), iif(Value < Mean, 1, 2))
-            NewRangeID
+            case
+              when Value < Mean then 1
+              when Value > Mean then 2
+              when R.ID <= S.ID then 1
+              else 2
+            end NewRangeID
         from
           @ranges R
           join

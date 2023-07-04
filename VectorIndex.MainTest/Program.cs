@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+using System.IO.MemoryMappedFiles;
+using System.Runtime.InteropServices;
 
 using FASTER.core;
 
@@ -7,6 +9,8 @@ using HDF.PInvoke;
 using HDF5CSharp;
 
 using NesterovskyBros.VectorIndex;
+
+using static System.Formats.Asn1.AsnWriter;
 
 var randomInput = GetRandomDataset((int)DateTime.Now.Ticks, 10000, 1536);
 
@@ -52,10 +56,47 @@ if (false)
 
   await foreach(var (rangeId, range) in Test2(
     input.ToAsyncEnumerable(),
-    () => new MemoryRangeStore()))
+    (_, _) => new MemoryRangeStore()))
   {
     ++count;
   }
+
+  stopwatch.Stop();
+
+  Console.WriteLine($"Build index: {stopwatch.Elapsed}");
+}
+
+// Crafted set.
+if (true)
+{
+  var stopwatch = new Stopwatch();
+
+  stopwatch.Start();
+
+  IEnumerable<(long, Memory<float>)> input()
+  {
+    var dimensions = 1536;
+
+    for(var i = 0L; i < dimensions; ++i)
+    {
+      var vector = new float[dimensions];
+
+      vector[i] = 1;
+
+      yield return (i, vector);
+    }
+  }
+
+  stopwatch.Stop();
+
+  Console.WriteLine($"Load points: {stopwatch.Elapsed}");
+
+  stopwatch.Restart();
+
+  var index = await Test2(
+    input().ToAsyncEnumerable(),
+    (_, _) => new MemoryRangeStore()).
+    ToDictionaryAsync(item => item.rangeId, item => item.range);
 
   stopwatch.Stop();
 
@@ -68,44 +109,34 @@ if (false)
 
   if(fileName != null)
   {
-    var datasetInput = GetHdf5Dataset(fileName, "/train");
+    var (size, dimension) = GetHdf5DatasetSize(fileName, "/train");
+    var datasetInput = GetHdf5Dataset(fileName, "/train", size, dimension);
+    using var store = new MemoryMappedIndexTempStore(size, dimension);
+
 
     // /train, /test
-    //var flat = Hdf5.ReadFlatFileStructure(fileName);
 
     var stopwatch = new Stopwatch();
 
-    stopwatch.Start();
+    //stopwatch.Start();
 
-    var input = datasetInput.ToList();
+    //var input = datasetInput.ToList();
 
-    stopwatch.Stop();
+    //stopwatch.Stop();
 
-    Console.WriteLine($"Load points: {stopwatch.Elapsed}");
+    //Console.WriteLine($"Load points: {stopwatch.Elapsed}");
 
     stopwatch.Restart();
 
-    var count = 0L;
-
-    await foreach(var (rangeId, range) in Test2(
-      input.ToAsyncEnumerable(),
-      () => new MemoryRangeStore()))
-    {
-      ++count;
-
-      if(count < 10 ||
-        count < 100 && count % 10 == 0 ||
-        count < 1000 && count % 100 == 0 ||
-        count < 10000 && count % 1000 == 0 ||
-        count % 100000 == 0)
-      {
-        Console.WriteLine($"Processed {count} ranges.");
-      }
-    }
+    var index = await Test2(
+      datasetInput.ToAsyncEnumerable(),
+      //(_, _) => new MemoryRangeStore()).
+      store.NextStore).
+      ToDictionaryAsync(item => item.rangeId, item => item.range);
 
     stopwatch.Stop();
 
-    Console.WriteLine($"Build index: {stopwatch.Elapsed}");
+    Console.WriteLine($"Build index: {stopwatch.Elapsed}, ranges: {index.Count}");
   }
 }
 
@@ -147,7 +178,7 @@ async ValueTask Test(
 
 IAsyncEnumerable<(long rangeId, RangeValue range)> Test2(
   IAsyncEnumerable<(long id, Memory<float> vector)> input,
-  Func<IRangeStore> storeFactory) =>
+  Func<long, long, IRangeStore> storeFactory) =>
   IndexBuilder.Build(input, storeFactory);
 
 FasterStore<K, V> CreateStore<K, V>(string path)
@@ -191,58 +222,63 @@ IEnumerable<(long id, Memory<float> vector)> GetRandomDataset(
   }
 }
 
-IEnumerable<(long id, Memory<float> vector)> GetHdf5Dataset(
-string fileName, 
+(long count, short dimensions) GetHdf5DatasetSize(
+  string fileName, 
   string datasetName)
 {
   var fileId = Hdf5.OpenFile(fileName, true);
-  var index = 0UL;
-  var step = 1000U;
-  var size = 0UL;
-  var dimension = (short)0;
+  var datasetId = H5D.open(fileId, Hdf5Utils.NormalizedName(datasetName));
 
   try
   {
-    var datasetId = H5D.open(fileId, Hdf5Utils.NormalizedName(datasetName));
+    var spaceId = H5D.get_space(datasetId);
 
     try
     {
-      var spaceId = H5D.get_space(datasetId);
+      int rank = H5S.get_simple_extent_ndims(spaceId);
 
-      try
+      if(rank != 2)
       {
-        int rank = H5S.get_simple_extent_ndims(spaceId);
-
-        if (rank != 2)
-        {
-          throw new InvalidOperationException("Invalid rank.");
-        }
-
-        ulong[] maxDims = new ulong[rank];
-        ulong[] dims = new ulong[rank];
-        
-        H5S.get_simple_extent_dims(spaceId, dims, maxDims);
-
-        size = maxDims[0];
-        dimension = checked((short)maxDims[1]);
+        throw new InvalidOperationException("Invalid rank.");
       }
-      finally
-      {
-        H5S.close(spaceId);
-      }
+
+      ulong[] maxDims = new ulong[rank];
+      ulong[] dims = new ulong[rank];
+
+      H5S.get_simple_extent_dims(spaceId, dims, maxDims);
+
+      return (checked((long)maxDims[0]), checked((short)maxDims[1]));
     }
     finally
     {
-      H5D.close(datasetId);
+      H5S.close(spaceId);
     }
+  }
+  finally
+  {
+    H5D.close(datasetId);
+  }
+} 
 
+IEnumerable<(long id, Memory<float> vector)> GetHdf5Dataset(
+  string fileName, 
+  string datasetName,
+  long size,
+  short dimension)
+{
+  var index = 0L;
+  var step = 10000;
+  var fileId = Hdf5.OpenFile(fileName, true);
+
+  try
+  { 
     while(index < size)
     {
       var rows = Hdf5.ReadDataset<float>(
         fileId,
         datasetName,
-        index,
-        Math.Min(index + step - 1, size));
+        checked((ulong)index),
+        Math.Min(checked((ulong)(index + step - 1)), checked((ulong)(size - 1))));
 
       var count = rows.GetLength(0);
 
@@ -255,7 +291,7 @@ string fileName,
           row[j] = rows[i, j];
         }
 
-        yield return ((long)index++, row);
+        yield return (index++, row);
       }
     }
   }

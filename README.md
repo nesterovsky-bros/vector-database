@@ -26,7 +26,7 @@ It is only a half a step to extend vector of booleans to vector of floats. It is
 3.1. Split whole vector space in two parts.  
   There are multiple ways to do this but we selected one of the simplest and available in the SQL.  
   We calculate a mean `avg()` and a standard deviation `stdev()` of all vectors for each dimension.  
-  For the split we select a dimension with highest standard deviation, and split in the mean point.  
+  For the split we select a dimension with highest and lowest standard deviation, and split in the mean point.  
   This gives us two subsets of vectors of similar cardinality.  
   
 3.2. Repeat step 3.1 for each subset, unless it contains exactly one vector.    
@@ -91,8 +91,8 @@ Thank you for you attention.
  ## C#
 
 It turned that our initial parallel C# implementation is not scalable for relatively big datasets like deep-image-96-angular, containing ~10M vectors.
-Though it is parallel and has `O(N*Log2(N))` complexity, it runs wildly against Processor/CPU data locality, and producess enormous number of Page Faults.
-Alternative data storage like FasterKV turn out to be too slow.
+Though it is parallel and has `O(N*Log2(N))` complexity, it runs wildly against Process/CPU data locality, and producess enormous number of Page Faults.
+Alternative data storage like FasterKV turns out to be too slow.
 
 So, we went and refactored the code from parallel tree level processor into sequential tree walker.
 It virtually follows steps 3.1, and 3.2 sequentially for one range at time.
