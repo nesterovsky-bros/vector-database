@@ -1,8 +1,4 @@
 ﻿using System.Diagnostics;
-using System.IO.MemoryMappedFiles;
-using System.Runtime.InteropServices;
-
-using FASTER.core;
 
 using HDF.PInvoke;
 
@@ -10,55 +6,23 @@ using HDF5CSharp;
 
 using NesterovskyBros.VectorIndex;
 
-using static System.Formats.Asn1.AsnWriter;
-
 var randomInput = GetRandomDataset((int)DateTime.Now.Ticks, 10000, 1536);
 
-// Test memory
-//{
-//  await using var points = new MemoryStore<long, Memory<float>>();
-//  await using var ranges = new MemoryStore<long, RangeValue>();
-//  await using var pointRanges = new MemoryStore<long, long>();
-//  await using var stats = new MemoryStore<StatsKey, Memory<Stats>>();
-
-//  await Test(randomInput, points, ranges, pointRanges, stats);
-//}
-
-// Test FasterKV
-//{
-//var root = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
-
-//await using var points = CreateStore<long, Memory<float>>($"{root}.points");
-//await using var ranges = CreateStore<long, RangeValue>($"{root}.ranges");
-//await using var pointRanges = CreateStore<long, long>($"{root}.pointRanges");
-//await using var stats = CreateStore<StatsKey, Memory<Stats>>($"{root}.stats");
-
-//await Test(randomInput, points, ranges, pointRanges, stats);
-//}
-
-
 // Test2 memory
-if (false)
+if (true)
 {
   var stopwatch = new Stopwatch();
 
   stopwatch.Start();
 
-  var input = randomInput.ToList();
+  var index = new Dictionary<long, RangeValue>();
 
-  stopwatch.Stop();
-
-  Console.WriteLine($"Load points: {stopwatch.Elapsed}");
-
-  stopwatch.Restart();
-
-  var count = 0L;
-
-  await foreach(var (rangeId, range) in Test2(
-    input.ToAsyncEnumerable(),
-    (_, _) => new MemoryRangeStore()))
+  await foreach(var (rangeId, range) in 
+    Test(
+      randomInput,
+      (_, _) => new MemoryRangeStore()))
   {
-    ++count;
+    index.Add(rangeId, range);
   }
 
   stopwatch.Stop();
@@ -73,7 +37,21 @@ if (true)
 
   stopwatch.Start();
 
-  IEnumerable<(long, Memory<float>)> input()
+  var index = new Dictionary<long, RangeValue>();
+
+  await foreach(var (rangeId, range) in
+    Test(
+      input(),
+      (_, _) => new MemoryRangeStore()))
+  {
+    index.Add(rangeId, range);
+  }
+
+  stopwatch.Stop();
+
+  Console.WriteLine($"Build index: {stopwatch.Elapsed}");
+
+  async IAsyncEnumerable<(long, Memory<float>)> input()
   {
     var dimensions = 1536;
 
@@ -86,53 +64,90 @@ if (true)
       yield return (i, vector);
     }
   }
-
-  stopwatch.Stop();
-
-  Console.WriteLine($"Load points: {stopwatch.Elapsed}");
-
-  stopwatch.Restart();
-
-  var index = await Test2(
-    input().ToAsyncEnumerable(),
-    (_, _) => new MemoryRangeStore()).
-    ToDictionaryAsync(item => item.rangeId, item => item.range);
-
-  stopwatch.Stop();
-
-  Console.WriteLine($"Build index: {stopwatch.Elapsed}");
 }
 
 // Test deep-image-96-angular.hdf5
+if (true)
 {
   var fileName = args.Length > 0 ? args[0] : null;
 
   if(fileName != null)
   {
-    var (size, dimension) = GetHdf5DatasetSize(fileName, "/train");
-    var datasetInput = GetHdf5Dataset(fileName, "/train", size, dimension);
-    using var store = new MemoryMappedIndexTempStore(size, dimension);
+    using var outputWriter = args.Length > 1 ? File.CreateText(args[1]) : null;
 
+    if (outputWriter != null)
+    {
+      await outputWriter.WriteLineAsync("RangeID,Dimension,Mid,ID");
+    }
 
     // /train, /test
+    var (size, dimension) = GetHdf5DatasetSize(fileName, "/train");
+    var datasetInput = GetHdf5Dataset(fileName, "/train", size, dimension);
+    using var store = new FileRangeStore(size, dimension, 10000);
 
     var stopwatch = new Stopwatch();
 
-    //stopwatch.Start();
+    if(args.Length > 2)
+    {
+      var count = 0L;
+      using var trainWriter = File.CreateText(args[2]);
 
-    //var input = datasetInput.ToList();
+      await trainWriter.WriteLineAsync("ID|Vector");
 
-    //stopwatch.Stop();
+      await foreach(var (id, vector) in datasetInput)
+      {
+        await trainWriter.WriteLineAsync($"{id}|{string.Join(',', vector.ToArray())}");
 
-    //Console.WriteLine($"Load points: {stopwatch.Elapsed}");
+        ++count;
 
-    stopwatch.Restart();
+        if(count % 100000 == 0)
+        {
+          Console.WriteLine($"Processed {count} records.");
+        }
+      }
+    }
 
-    var index = await Test2(
-      datasetInput.ToAsyncEnumerable(),
-      //(_, _) => new MemoryRangeStore()).
-      store.NextStore).
-      ToDictionaryAsync(item => item.rangeId, item => item.range);
+    if (args.Length > 3)
+    {
+      var count = 0L;
+      var (testSize, testDimension) = GetHdf5DatasetSize(fileName, "/test");
+      var testDataset = GetHdf5Dataset(fileName, "/test", testSize, testDimension);
+     
+      using var testWriter = File.CreateText(args[3]);
+
+      await testWriter.WriteLineAsync("ID,Vector");
+
+      await foreach(var (id, vector) in testDataset)
+      {
+        await testWriter.WriteLineAsync($"{id}|{string.Join(',', vector.ToArray())}");
+
+        ++count;
+
+        if(count % 100000 == 0)
+        {
+          Console.WriteLine($"Processed {count} records.");
+        }
+      }
+    }
+
+    stopwatch.Start();
+
+    var index = new Dictionary<long, RangeValue>();
+
+    await foreach(var (rangeId, range) in
+      Test(
+        datasetInput,
+        //(_, _) => new MemoryRangeStore()).
+        store.NextStore))
+    {
+      index.Add(rangeId, range);
+
+      if (outputWriter != null)
+      {
+        await outputWriter.WriteLineAsync(
+          $"{rangeId},{range.Dimension},{range.Mid},{range.Id}");
+      }
+    }
 
     stopwatch.Stop();
 
@@ -140,69 +155,12 @@ if (true)
   }
 }
 
-async ValueTask Test(
-  IEnumerable<(long id, Memory<float> vector)> input,
-  IStore<long, Memory<float>> points,
-  IStore<long, RangeValue> ranges,
-  IStore<long, long> pointRanges,
-  IStore<StatsKey, Memory<Stats>> stats)
-{
-  var stopwatch = new Stopwatch();
-
-  stopwatch.Start();
-
-  foreach(var item in input)
-  {
-    await points.Set(item.id, item.vector);
-  }
-
-  stopwatch.Stop();
-
-  Console.WriteLine($"Load points: {stopwatch.Elapsed}");
-
-  stopwatch.Restart();
-
-  await IndexBuilder.Build(points, ranges, pointRanges, stats);
-
-  stopwatch.Stop();
-
-  //await foreach(var value in ranges.GetItems())
-  //{
-  //  var range = IndexBuilder.GetRange(value.id, value.value);
-
-  //  Console.WriteLine(range);
-  //}
-
-  Console.WriteLine($"Build index: {stopwatch.Elapsed}");
-}
-
-IAsyncEnumerable<(long rangeId, RangeValue range)> Test2(
+IAsyncEnumerable<(long rangeId, RangeValue range)> Test(
   IAsyncEnumerable<(long id, Memory<float> vector)> input,
   Func<long, long, IRangeStore> storeFactory) =>
   IndexBuilder.Build(input, storeFactory);
 
-FasterStore<K, V> CreateStore<K, V>(string path)
-  where K: unmanaged
-{
-  var settings = new FasterKVSettings<K, V>(path, true);
-
-  try
-  {
-    settings.MemorySize = 1L << 30;
-    settings.PageSize = 1L << 25;
-    settings.IndexSize = 1L << 26;
-
-    return new FasterStore<K, V>(settings);
-  }
-  catch
-  {
-    settings.Dispose();
-
-    throw;
-  }
-}
-
-IEnumerable<(long id, Memory<float> vector)> GetRandomDataset(
+async IAsyncEnumerable<(long id, Memory<float> vector)> GetRandomDataset(
   int seed, 
   long count, 
   short dimensions)
@@ -260,14 +218,14 @@ IEnumerable<(long id, Memory<float> vector)> GetRandomDataset(
   }
 } 
 
-IEnumerable<(long id, Memory<float> vector)> GetHdf5Dataset(
+async IAsyncEnumerable<(long id, Memory<float> vector)> GetHdf5Dataset(
   string fileName, 
   string datasetName,
   long size,
   short dimension)
 {
   var index = 0L;
-  var step = 10000;
+  var step = 100000;
   var fileId = Hdf5.OpenFile(fileName, true);
 
   try

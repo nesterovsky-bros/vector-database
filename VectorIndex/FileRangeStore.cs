@@ -7,7 +7,7 @@ namespace NesterovskyBros.VectorIndex;
 /// <summary>
 /// A memory mapped file as a store for building vector index.
 /// </summary>
-public class MemoryMappedIndexTempStore: IDisposable
+public class FileRangeStore: IDisposable
 {
   /// <summary>
   /// Creates a <see cref="MemoryMappedIndexTempStore"/> instance.
@@ -15,7 +15,7 @@ public class MemoryMappedIndexTempStore: IDisposable
   /// <param name="count">Number of vectors.</param>
   /// <param name="dimensions">Dimension of vectors.</param>
   /// <param name="buffer">A buffer size.</param>
-  public MemoryMappedIndexTempStore(long count, short dimensions, int buffer = 10000)
+  public FileRangeStore(long count, short dimensions, int buffer = 10000)
   {
     this.dimensions = dimensions;
     this.buffer = buffer;
@@ -45,7 +45,7 @@ public class MemoryMappedIndexTempStore: IDisposable
   private class RangeStore: IRangeStore
   {
     public RangeStore(
-      MemoryMappedIndexTempStore container,
+      FileRangeStore container,
       long rangeId,
       long capacity)
     {
@@ -74,8 +74,36 @@ public class MemoryMappedIndexTempStore: IDisposable
       return ValueTask.CompletedTask;
     }
 
-    public IAsyncEnumerable<(long id, Memory<float> vector)> GetPoints() =>
-      Points().ToAsyncEnumerable();
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+    public async IAsyncEnumerable<(long id, Memory<float> vector)> GetPoints()
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+    {
+      if (stream != null)
+      {
+        stream.Position = 0;
+
+        for(var i = 0L; i < count - data.Count; ++i)
+        {
+          var id = 0L;
+          var vector = new float[container.dimensions];
+
+          stream.Read(MemoryMarshal.CreateSpan(
+            ref Unsafe.As<long, byte>(ref id),
+            Marshal.SizeOf<long>()));
+          stream.Read(
+            MemoryMarshal.CreateSpan(
+              ref Unsafe.As<float, byte>(ref vector[0]),
+              Marshal.SizeOf<float>() * container.dimensions));
+
+          yield return (id, vector);
+        }
+      }
+
+      foreach(var item in data)
+      {
+        yield return item;
+      }
+    }
 
     public ValueTask DisposeAsync()
     {
@@ -136,37 +164,8 @@ public class MemoryMappedIndexTempStore: IDisposable
       }
     }
 
-    private IEnumerable<(long id, Memory<float> vector)> Points()
-    {
-      if (stream != null)
-      {
-        stream.Position = 0;
-
-        for(var i = 0L; i < count - data.Count; ++i)
-        {
-          var id = 0L;
-          var vector = new float[container.dimensions];
-
-          stream.Read(MemoryMarshal.CreateSpan(
-            ref Unsafe.As<long, byte>(ref id),
-            Marshal.SizeOf<long>()));
-          stream.Read(
-            MemoryMarshal.CreateSpan(
-              ref Unsafe.As<float, byte>(ref vector[0]),
-              Marshal.SizeOf<float>() * container.dimensions));
-
-          yield return (id, vector);
-        }
-      }
-
-      foreach(var item in data)
-      {
-        yield return item;
-      }
-    }
-
     private readonly long rangeId;
-    private readonly MemoryMappedIndexTempStore container;
+    private readonly FileRangeStore container;
     private readonly List<(long id, Memory<float> vector)> data = new();
     private readonly long capacity;
     private long start;
