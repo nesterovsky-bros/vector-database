@@ -14,6 +14,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Files", "Files", "{D7D7DEE3
 		README.md = README.md
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MemoryVectorIndex", "MemoryVectorIndex\MemoryVectorIndex.csproj", "{C6F45BC6-752D-4B54-86E8-4842254FA110}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MempryVectorIndex.Tests", "MempryVectorIndex.Tests\MempryVectorIndex.Tests.csproj", "{746E60D8-757E-4C27-908C-AA42F8E4A458}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -28,6 +32,14 @@ Global
 		{04DC6990-8492-41A6-9C0A-19C39B315919}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{04DC6990-8492-41A6-9C0A-19C39B315919}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{04DC6990-8492-41A6-9C0A-19C39B315919}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C6F45BC6-752D-4B54-86E8-4842254FA110}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C6F45BC6-752D-4B54-86E8-4842254FA110}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C6F45BC6-752D-4B54-86E8-4842254FA110}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C6F45BC6-752D-4B54-86E8-4842254FA110}.Release|Any CPU.Build.0 = Release|Any CPU
+		{746E60D8-757E-4C27-908C-AA42F8E4A458}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{746E60D8-757E-4C27-908C-AA42F8E4A458}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{746E60D8-757E-4C27-908C-AA42F8E4A458}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{746E60D8-757E-4C27-908C-AA42F8E4A458}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
