@@ -46,23 +46,6 @@ public class MemoryVectorIndexTests
       }
     }
 
-    //var view = System.Text.Json.JsonSerializer.Serialize(
-    //  index.IndexHierarchy.Select(item => new
-    //  {
-    //    item.index,
-    //    item.parent,
-    //    item.depth,
-    //    center = item.center.ToArray(),
-    //    range = item.range.ToArray(),
-    //    records = item.records?.Select(item => item.vector).ToArray()
-    //  }),
-    //  new System.Text.Json.JsonSerializerOptions()
-    //  {
-    //    WriteIndented = true
-    //  });
-    //
-    // Console.WriteLine(view);
-
     Test("Test_10_10", records, [.3f, .3f], .3f);
   }
 
@@ -157,6 +140,21 @@ public class MemoryVectorIndexTests
     float distance)
   {
     var index = new MemoryVectorIndex<Record>(records, record => record.vector);
+
+    //var view = System.Text.Json.JsonSerializer.Serialize(
+    //  index.IndexHierarchy.Select(item => new
+    //  {
+    //    item.index,
+    //    item.parent,
+    //    center = item.center.ToArray(),
+    //    records = item.records?.Select(item => item.vector).ToArray()
+    //  }),
+    //  new System.Text.Json.JsonSerializerOptions()
+    //  {
+    //    WriteIndented = true
+    //  });
+
+    //Console.WriteLine(view);
 
     Assert.AreEqual(index.Count, records.Count);
 

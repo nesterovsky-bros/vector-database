@@ -1,6 +1,5 @@
 ﻿using System.Collections;
 using System.Numerics;
-using System.Runtime.Intrinsics;
 
 namespace NesterovskyBros.VectorIndex;
 
@@ -109,20 +108,22 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
     }
 
     var index = 0;
-    var center = new float[vector.Length];
-    var step = new float[vector.Length];
+    var step = 1f;
+    var centers = new float[vector.Length];
 
     for(var depth = 0; depth < maxDepth; ++depth)
     {
+      step /= 2;
+
       for(var i = 0; i < vector.Length; ++i)
       {
         var (low, high) = entries[index];
 
-        if (vector[i] < center[i])
+        if (vector[i] < centers[i])
         {
           if (low >= 0)
           {
-            center[i] -= depth == 0 ? step[i] = .5f : step[i] /= 2;
+            centers[i] -= step;
             index = low;
 
             continue;
@@ -142,7 +143,7 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
         {
           if (high >= 0)
           {
-            center[i] += depth == 0 ? step[i] = .5f : step[i] /= 2;
+            centers[i] += step;
             index = high;
 
             continue;
@@ -183,7 +184,7 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
             {
               var item = list[j];
 
-              if (vectorSelector(item).Span[i] < center[i])
+              if (vectorSelector(item).Span[i] < centers[i])
               {
                 lowList.Add(item);
                 list.RemoveAt(j);
@@ -192,14 +193,14 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
 
             if (lowList is [])
             {
-              center[i] += depth == 0 ? step[i] = .5f : step[i] /= 2;
+              centers[i] += step;
               entries[index] = (-1, entries.Count);
               index = entries.Count;
               entries.Add((-1, -1));
             }
             else if (list is [])
             {
-              center[i] -= depth == 0 ? step[i] = .5f : step[i] /= 2;
+              centers[i] -= step;
               (lowList, list) = (list, lowList);
               entries[index] = (entries.Count, -1);
               index = entries.Count;
@@ -254,29 +255,19 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
     }
 
     var index = 0;
-    var center = new float[vector.Length];
-    var step = new float[vector.Length];
+    var centers = new float[vector.Length];
+    Stack<(int index, int i, float center, float step, float length)> state =
+      [];
 
-    Stack<
-      (
-        int index, 
-        int depth, 
-        int i, 
-        float center, 
-        float step, 
-        float length
-      )> state = [];
-
-    state.Push((0, 0, 0, 0, 1, distance * distance));
+    state.Push((0, 0, 0, 1, distance * distance));
 
     while(state.TryPeek(out var item))
     {
-      var i = item.i;
       (var prev, index) = (index, item.index);
+      var (i, center, step) = (item.i, item.center, item.step);
       var (low, high) = entries[index];
       
-      center[i] = item.center;
-      step[i] = item.step;
+      centers[i] = center;
 
       if (prev == high)
       {
@@ -285,37 +276,27 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
         continue;
       }
 
-      var depth = item.depth;
-      var value = vector.Span[i];
-      var delta = value - item.center;
-      
-      var prevDelta = depth == 0 ? 0 :
-        Math.Max(
-          delta > 0 ?
-            value - item.center - item.step : 
-            item.center - item.step - value,
-          0);
+      var delta = vector.Span[i] - center;
+      var prevDelta = Math.Max(Math.Abs(delta) - step, 0);
 
       if (prev != low && low != -1)
       {
-        var length = item.length;
-
-        if (delta > 0)
-        {
-          length += (prevDelta - delta) * (prevDelta + delta);
-        }
+        var length = delta <= 0 ? item.length :
+          item.length + (prevDelta - delta) * (prevDelta + delta);
 
         if (length >= 0)
         {
-          center[i] -= step[i] /= 2;
+          var half = step / 2;
+          
+          centers[i] -= half;
 
           if (++i == vectorSize)
           {
             i = 0;
-            ++depth;
+            step = half;
           }
 
-          state.Push((low, depth, i, center[i], depth == 0 ? 1 : step[i], length));
+          state.Push((low, i, centers[i], step, length));
 
           continue;
         }
@@ -323,24 +304,22 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
 
       if (high != -1)
       {
-        var length = item.length;
-
-        if (delta < 0)
-        {
-          length += (prevDelta - delta) * (prevDelta + delta);
-        }
+        var length = delta >= 0 ? item.length :
+          item.length + (prevDelta - delta) * (prevDelta + delta);
 
         if (length >= 0)
         {
-          center[i] += step[i] /= 2;
+          var half = step / 2;
+
+          centers[i] += half;
 
           if (++i == vectorSize)
           {
             i = 0;
-            ++depth;
+            step = half;
           }
 
-          state.Push((high, depth, i, center[i], depth == 0 ? 1 : step[i], length));
+          state.Push((high, i, centers[i], step, length));
         }
         else
         {
@@ -393,21 +372,19 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
 
     var vectorSpan = vector.Span;
     var index = 0;
-    var center = new float[vector.Length];
-    var step = new float[vector.Length];
-    Stack<(int index, int depth, int i, float center, float step, float length)> state = [];
+    var centers = new float[vector.Length];
+    Stack<(int index, int i, float center, float step, float length)> state =
+      [];
 
-    state.Push((0, 0, 0, 0, 1, distance * distance));
+    state.Push((0, 0, 0, 1, distance * distance));
 
     while(state.TryPeek(out var item))
     {
-      var i = item.i;
-
-      center[i] = item.center;
-      step[i] = item.step;
-
       (var prev, index) = (index, item.index);
+      var (i, center, step) = (item.i, item.center, item.step);
       var (low, high) = entries[index];
+
+      centers[i] = center;
 
       if (prev == high)
       {
@@ -416,30 +393,27 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
         continue;
       }
 
-      var depth = item.depth;
-      var value = vectorSpan[i];
-      var delta = value - item.center;
+      var delta = vectorSpan[i] - center;
+      var prevDelta = Math.Max(Math.Abs(delta) - step, 0);
 
       if (prev != low && low != -1)
       {
-        var length = item.length;
-
-        if (delta > 0)
-        { 
-          length -= delta * delta;
-        }
+        var length = delta <= 0 ? item.length :
+          item.length + (prevDelta - delta) * (prevDelta + delta);
 
         if (length >= 0)
         {
-          center[i] -= step[i] /= 2;
+          var half = step / 2;
+
+          centers[i] -= half;
 
           if (++i == vectorSize)
           {
             i = 0;
-            ++depth;
+            step = half;
           }
 
-          state.Push((low, depth, i, center[i], depth == 0 ? 1 : step[i], length));
+          state.Push((low, i, centers[i], step, length));
 
           continue;
         }
@@ -447,24 +421,22 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
 
       if (high != -1)
       {
-        var length = item.length;
-
-        if (delta < 0)
-        {
-          length -= delta * delta;
-        }
+        var length = delta >= 0 ? item.length :
+          item.length + (prevDelta - delta) * (prevDelta + delta);
 
         if (length >= 0)
         {
-          center[i] += step[i] /= 2;
+          var half = step / 2;
+
+          centers[i] += half;
 
           if (++i == vectorSize)
           {
             i = 0;
-            ++depth;
+            step = half;
           }
 
-          state.Push((high, depth, i, center[i], depth == 0 ? 1 : step[i], length));
+          state.Push((high, i, centers[i], step, length));
         }
         else
         {
@@ -474,10 +446,10 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
         continue;
       }
 
+      state.Pop();
+
       if (low == -1)
       {
-        state.Pop();
-
         var list = records[index];
 
         for(i = list.Count; i-- > 0;)
@@ -499,8 +471,7 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
 
             if (low == -1 || high == -1)
             {
-              center[i] = item.center;
-              step[i] = item.step;
+              centers[i] = center;
               index = item.index;
               entries[item.index] = (-1, -1);
               state.Pop();
@@ -521,9 +492,7 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
     (
       int index,
       int parent,
-      int depth,
       ReadOnlyMemory<float> center,
-      ReadOnlyMemory<float> range,
       IReadOnlyList<R>? records
     )> IndexHierarchy
   {
@@ -535,23 +504,19 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
       }
 
       var index = 0;
-      var center = new float[vectorSize];
-      var step = new float[vectorSize];
-      Stack<(int index, int parent, int depth, int i, float center, float step)> state = [];
+      var step = 1f;
+      var centers = new float[vectorSize];
+      Stack<(int index, int parent, int i, float center, float step)> state = [];
 
-      Array.Fill(step, 1);
-
-      state.Push((0, -1, 0, 0, 0, 1));
+      state.Push((0, -1, 0, 0, 1));
 
       while(state.TryPeek(out var item))
       {
         var i = item.i;
-
-        center[i] = item.center;
-        step[i] = item.step;
-
         (var prev, index) = (index, item.index);
         var (low, high) = entries[index];
+
+        centers[i] = item.center;
 
         if (prev == high)
         {
@@ -560,38 +525,40 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
           continue;
         }
 
-        var depth = item.depth;
-
         if (prev != low && low != -1)
         {
-          center[i] -= step[i] /= 2;
+          var half = step /= 2;
+
+          centers[i] -= half;
 
           if (++i == vectorSize)
           {
             i = 0;
-            ++depth;
+            step = half;
           }
 
-          state.Push((low, index, depth, i, center[i], step[i]));
+          state.Push((low, index, i, centers[i], step));
 
-          yield return (low, index, depth, center, step, null);
+          yield return (low, index, centers, null);
 
           continue;
         }
 
         if (high != -1)
         {
-          center[i] += step[i] /= 2;
+          var half = step /= 2;
+
+          centers[i] += half;
 
           if (++i == vectorSize)
           {
             i = 0;
-            ++depth;
+            step = half;
           }
 
-          state.Push((high, index, depth, i, center[i], depth == 0 ? 1 : step[i]));
+          state.Push((high, index, i, centers[i], step));
 
-          yield return (low, index, depth, center, step, null);
+          yield return (low, index, centers, null);
 
           continue;
         }
@@ -600,7 +567,7 @@ public class MemoryVectorIndex<R>: IEnumerable<R>
         {
           state.Pop();
 
-          yield return (index, item.parent, depth, center, step, records[index]);
+          yield return (index, item.parent, centers, records[index]);
         }
       }
     }
